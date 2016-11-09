@@ -88,7 +88,11 @@ function handleRequest(req, event) {
     if (id >= 0 && id < files.length) {
       var file = files[id];
       var type = file.type || "binary/octet-stream";
-      var headers = new Headers({'Content-Type': type});
+      var headers = new Headers({
+        'Content-Type': type,
+        'Content-Disposition': "inline; filename*=UTF-8''" +
+                               encodeRFC5987ValueChars(file.name),
+      });
       LOG("Sending file " + file.name);
       event.respondWith(new Response(file, {"headers": headers}));
     } else {
@@ -110,4 +114,16 @@ function handleRequest(req, event) {
       }));
     });
   }
+}
+
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent
+function encodeRFC5987ValueChars (str) {
+  return encodeURIComponent(str).
+    // Note that although RFC3986 reserves "!", RFC5987 does not,
+    // so we do not need to escape it
+    replace(/['()]/g, escape). // i.e., %27 %28 %29
+    replace(/\*/g, '%2A').
+    // The following are not required for percent-encoding per RFC5987,
+    // so we can allow for a little better readability over the wire: |`^
+    replace(/%(?:7C|60|5E)/g, unescape);
 }
