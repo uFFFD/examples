@@ -67,7 +67,7 @@ function handleRequest(req, event) {
   LOG("Got fetch request for " + req.url);
 
   if (req.url == "/") {
-    fetch("/client/index.html").then(function (response) {
+    fetch("./client/index.html").then(function (response) {
       event.respondWith(response);
     });
 
@@ -90,7 +90,7 @@ function handleRequest(req, event) {
     event.respondWith(new Response(file, headers));
 
   } else {
-    fetch("/client/" + req.url).then(function (response) {
+    fetch("./client/" + req.url).then(function (response) {
       event.respondWith(response);
     });
   }
