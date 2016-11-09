@@ -84,15 +84,30 @@ function handleRequest(req, event) {
 
   } else if (req.url.startsWith("/file/")) {
     var id = Number.parseInt(req.url.split("/")[2]);
-    var file = get_shared_files()[id];
-    var type = file.type || "binary/octet-stream";
-    var headers = new Headers({'Content-Type': type});
-    LOG("Sending file " + file.name);
-    event.respondWith(new Response(file, {"headers": headers}));
+    var files = get_shared_files();
+    if (id >= 0 && id < files.length) {
+      var file = files[id];
+      var type = file.type || "binary/octet-stream";
+      var headers = new Headers({'Content-Type': type});
+      LOG("Sending file " + file.name);
+      event.respondWith(new Response(file, {"headers": headers}));
+    } else {
+      LOG("Requested file index out of bounds");
+      event.respondWith(new Response("404 Not Found!", {
+        "status": 404,
+        "statusText": "Not Found",
+      }));
+    }
 
   } else {
     fetch("./client/" + req.url).then(function (response) {
       event.respondWith(response);
+    }).catch(function (error) {
+      LOG(error.message);
+      event.respondWith(new Response("404 Not Found!", {
+        "status": 404,
+        "statusText": "Not Found",
+      }));
     });
   }
 }
