@@ -79,7 +79,8 @@ function handleRequest(req, event) {
       respObj.files.push({name:file.name, size:file.size, id:id})
     }
     var headers = new Headers({'Content-Type': 'application/json'});
-    event.respondWith(new Response(JSON.stringify(respObj), headers));
+    event.respondWith(new Response(JSON.stringify(respObj),
+                                   {"headers": headers}));
 
   } else if (req.url.startsWith("/file/")) {
     var id = Number.parseInt(req.url.split("/")[2]);
@@ -87,7 +88,7 @@ function handleRequest(req, event) {
     var type = file.type || "binary/octet-stream";
     var headers = new Headers({'Content-Type': type});
     LOG("Sending file " + file.name);
-    event.respondWith(new Response(file, headers));
+    event.respondWith(new Response(file, {"headers": headers}));
 
   } else {
     fetch("./client/" + req.url).then(function (response) {
