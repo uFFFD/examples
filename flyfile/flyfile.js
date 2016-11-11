@@ -64,6 +64,15 @@ function share() {
 }
 
 function handleRequest(req, event) {
+  // only allow GET and HEAD methods
+  if (req.method != "GET" && req.method != "HEAD") {
+    event.respondWith(new Response("501 Not Implemented", {
+      "status": 501,
+      "statusText": "Not Implemented",
+    }));
+    return;
+  }
+
   LOG("Got fetch request for " + req.url);
 
   if (req.url == "/") {
