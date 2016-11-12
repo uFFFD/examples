@@ -127,7 +127,7 @@ function handleRequest(req, event) {
             var satisfiable = range.satisfiable;
             var boundary = Date.now();
             msg.push("multipart/byteranges: " + satisfiable.map(function (el) {
-              return el.join("-");
+              return el.map(prettyPrintSize).join("-");
             }).join(","));
             headers.set("Content-Type",
                         "multipart/byteranges; boundary=" + boundary);
@@ -145,7 +145,7 @@ function handleRequest(req, event) {
             body = new Blob(parts);
           } else {
             var satisfiable = range.satisfiable[0];
-            msg.push("range: " + satisfiable.join("-"));
+            msg.push("range: " + satisfiable.map(prettyPrintSize).join("-"));
             headers.set("Content-Range",
                         "bytes " + satisfiable.join("-") + "/" + filesize);
             body = file.slice(satisfiable[0], satisfiable[1] + 1);
@@ -264,4 +264,10 @@ function parseRangeHeader (range, filesize) {
       "multipart": ranges.length > 1,
     };
   }
+}
+
+// use _ as thousands separators to pretty print filesizes
+// e.g. 1234567890 => 1_234_567_890
+function prettyPrintSize (size) {
+  return size.toLocaleString("en-US").replace(/,/g, "_");
 }
