@@ -94,24 +94,83 @@ function handleRequest(req, event) {
   } else if (req.url.startsWith("/file/")) {
     var id = Number.parseInt(req.url.split("/")[2]);
     var files = get_shared_files();
+    var status;
+    var statusText;
+    var headers = new Headers();
+    var body;
+    var msg = [];
+
     if (id >= 0 && id < files.length) {
       var file = files[id];
+      var filesize = file.size;
       var type = file.type || "binary/octet-stream";
-      var headers = new Headers({
-        'Content-Type': type,
-        'Content-Disposition': "inline; filename*=UTF-8''" +
-                               encodeRFC5987ValueChars(file.name),
-      });
-      LOG("Sending file " + file.name);
-      event.respondWith(new Response(file, {"headers": headers}));
+
+      headers.set("Content-Type", type);
+      headers.set("Content-Disposition",
+                  "inline; filename*=UTF-8''" +
+                  encodeRFC5987ValueChars(file.name));
+      headers.set("Accept-Ranges", "bytes");
+
+      msg.push("Sending file " + file.name);
+
+      if (req.headers.has("range")) {
+        var range = parseRangeHeader(req.headers.get("range"), filesize);
+        status = range.status;
+        statusText = range.statusText;
+
+        if (status == 416) {
+          msg.push("416 Requested Range Not Satisfiable");
+          headers.set("Content-Range", "bytes */" + filesize);
+          body = "416 Requested Range Not Satisfiable";
+        } else if (status == 206) {
+          if (range.multipart) {
+            var satisfiable = range.satisfiable;
+            var boundary = Date.now();
+            msg.push("multipart/byteranges: " + satisfiable.map(function (el) {
+              return el.join("-");
+            }).join(","));
+            headers.set("Content-Type",
+                        "multipart/byteranges; boundary=" + boundary);
+            var CRLF = "\r\n";
+            var parts = [];
+            for (var el of satisfiable) {
+              parts.push(CRLF + "--" + boundary + CRLF);
+              parts.push("Content-type: " + type + CRLF);
+              parts.push("Content-range: bytes " +
+                         el.join("-") + "/" + filesize + CRLF);
+              parts.push(CRLF);
+              parts.push(file.slice(el[0], el[1] + 1));
+            }
+            parts.push(CRLF + "--" + boundary + "--" + CRLF);
+            body = new Blob(parts);
+          } else {
+            var satisfiable = range.satisfiable[0];
+            msg.push("range: " + satisfiable.join("-"));
+            headers.set("Content-Range",
+                        "bytes " + satisfiable.join("-") + "/" + filesize);
+            body = file.slice(satisfiable[0], satisfiable[1] + 1);
+          }
+        } else {
+          body = file;
+        }
+      } else {
+        status = 200;
+        statusText = "OK";
+        body = file;
+      }
     } else {
-      LOG("Requested file index out of bounds");
-      event.respondWith(new Response("404 Not Found!", {
-        "status": 404,
-        "statusText": "Not Found",
-      }));
+      msg.push("Requested file index out of bounds");
+      status = 404;
+      statusText = "Not Found";
+      body = "404 Not Found!";
     }
 
+    LOG(msg.join(", "));
+    event.respondWith(new Response(body, {
+      "status": status,
+      "statusText": statusText,
+      "headers": headers,
+    }));
   } else {
     fetch("./client/" + req.url).then(function (response) {
       event.respondWith(response);
@@ -135,4 +194,74 @@ function encodeRFC5987ValueChars (str) {
     // The following are not required for percent-encoding per RFC5987,
     // so we can allow for a little better readability over the wire: |`^
     replace(/%(?:7C|60|5E)/g, unescape);
+}
+
+// RFC 7233
+function parseRangeHeader (range, filesize) {
+  // An origin server MUST ignore a Range header field that contains a range
+  // unit it does not understand.
+  if (!range.startsWith("bytes=")) {
+    return {
+      "status": 200,
+      "statusText": "OK",
+    };
+  }
+
+  var ranges = [];
+
+  for (var r of range.slice(6).split(",")) {
+    if (!/^\s*(\d+-\d*|-\d+)\s*$/.test(r)) {
+      // not valid byte-range-spec or suffix-byte-range-spec
+      // ignore whole range header
+      return {
+        "status": 200,
+        "statusText": "OK",
+      };
+    }
+
+    r = r.trim().split("-");
+
+    if (r[0] == "") {
+      // suffix-byte-range-spec
+      // -xxx
+      // last xxx bytes
+      r[0] = filesize - Number.parseInt(r[1]);
+      r[1] = filesize - 1;
+    } else {
+      // byte-range-spec
+      // xxx-xxx or xxx-
+      r[0] = Number.parseInt(r[0]);
+      r[1] = r[1] == "" ? filesize - 1 : Number.parseInt(r[1]);
+    }
+    if (r[0] < 0) {
+      r[0] = 0;
+    }
+    if (r[1] >= filesize) {
+      r[1] = filesize - 1;
+    }
+    ranges.push(r);
+  }
+
+  var satisfiable = ranges.filter(function (el) {
+    return el[0] < filesize && el[0] <= el[1];
+  });
+
+  if (ranges.length == 0) {
+    return {
+      "status": 200,
+      "statusText": "OK",
+    };
+  } else if (satisfiable.length == 0) {
+    return {
+      "status": 416,
+      "statusText": "Requested Range Not Satisfiable",
+    };
+  } else {
+    return {
+      "status": 206,
+      "statusText": "Partial Content",
+      "satisfiable": satisfiable,
+      "multipart": ranges.length > 1,
+    };
+  }
 }
