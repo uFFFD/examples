@@ -242,9 +242,7 @@ function parseRangeHeader (range, filesize) {
     ranges.push(r);
   }
 
-  var satisfiable = ranges.filter(function (el) {
-    return el[0] < filesize && el[0] <= el[1];
-  });
+  var satisfiable = findSatisfiableRanges(ranges);
 
   if (ranges.length == 0) {
     return {
@@ -264,6 +262,60 @@ function parseRangeHeader (range, filesize) {
       "multipart": ranges.length > 1,
     };
   }
+}
+
+function findSatisfiableRanges (ranges) {
+  //  When multiple ranges are requested, a server MAY coalesce any of the
+  //  ranges that overlap, or that are separated by a gap that is smaller
+  //  than the overhead of sending multiple parts, regardless of the order
+  //  in which the corresponding byte-range-spec appeared in the received
+  //  Range header field.  Since the typical overhead between parts of a
+  //  multipart/byteranges payload is around 80 bytes, depending on the
+  //  selected representation's media type and the chosen boundary
+  //  parameter length, it can be less efficient to transfer many small
+  //  disjoint parts than it is to transfer the entire selected
+  //  representation.
+  //
+  //  When a multipart response payload is generated, the server SHOULD
+  //  send the parts in the same order that the corresponding
+  //  byte-range-spec appeared in the received Range header field,
+  //  excluding those ranges that were deemed unsatisfiable or that were
+  //  coalesced into other ranges.
+  return ranges.reduce(function (result, cur) {
+    if (cur[0] > cur[1]) {
+      return result;
+    }
+
+    if (result.length == 0) {
+      return [cur];
+    }
+
+    var last = result.pop();
+    // given a.start <= a.end and b.start <= b.end
+    // a and b are overlapped, or separated by a small gap (e.g. 80 bytes)
+    // if and only if !(a.end < b.start - 80 || b.end < a.start - 80)
+    //   ->  a.end > b.start - 80 && a.start - 80 < b.end
+    if (last[1] > cur[0] - 80 && last[0] - 80 < cur[1]) {
+      return [...result, [Math.min(last[0], cur[0]), Math.max(last[1], cur[1])]]
+    } else {
+      return [...result, last, cur];
+    }
+  }, []);
+
+  // XXX: todo
+  //
+  // 6.1.  Denial-of-Service Attacks Using Range
+  //
+  //   Unconstrained multiple range requests are susceptible to denial-of-
+  //   service attacks because the effort required to request many
+  //   overlapping ranges of the same data is tiny compared to the time,
+  //   memory, and bandwidth consumed by attempting to serve the requested
+  //   data in many parts.  Servers ought to ignore, coalesce, or reject
+  //   egregious range requests, such as requests for more than two
+  //   overlapping ranges or for many small ranges in a single set,
+  //   particularly when the ranges are requested out of order for no
+  //   apparent reason.  Multipart range requests are not designed to
+  //   support random access.
 }
 
 // use _ as thousands separators to pretty print filesizes
