@@ -1,14 +1,24 @@
 "use strict";
 
+const HTTP_STATUS_TEXT = {
+  200: "OK",
+  206: "Partial Content",
+  404: "Not Found",
+  416: "Requested Range Not Satisfiable",
+  500: "Internal Server Error",
+  501: "Not Implemented",
+};
+
 class HTTPError extends Error {
   constructor(message, resp) {
     super(message);
     this.name = "HTTPError";
     this.message = message;
     resp = resp || {};
+    let status = resp.status || 500;
     this.resp = new Response(resp.body, {
-      status: resp.status,
-      statusText: resp.statusText,
+      status: status,
+      statusText: resp.statusText || HTTP_STATUS_TEXT[status],
       headers: resp.headers,
     });
   }
@@ -89,7 +99,6 @@ function handleRequest(req) {
   if (req.method != "GET" && req.method != "HEAD") {
     return Promise.reject(new HTTPError(`${req.method} method not implemented`, {
       status: 501,
-      statusText: "Not Implemented",
       body: "501 Not Implemented",
     }));
   }
@@ -112,7 +121,6 @@ function serveStaticFile (file) {
     }).catch(function (error) {
       reject(new HTTPError(error.message, {
         status: 404,
-        statusText: "Not Found",
         body: "404 Not Found",
       }));
     });
@@ -136,7 +144,6 @@ function serveFileDownload (req) {
   var id = Number.parseInt(req.url.split("/")[2]);
   var files = get_shared_files();
   var status;
-  var statusText;
   var headers = new Headers();
   var body;
   var msg = [];
@@ -157,7 +164,6 @@ function serveFileDownload (req) {
     if (req.headers.has("range")) {
       var range = parseRangeHeader(req.headers.get("range"), filesize);
       status = range.status;
-      statusText = range.statusText;
 
       if (status == 416) {
         msg.push("416 Requested Range Not Satisfiable");
@@ -196,13 +202,11 @@ function serveFileDownload (req) {
       }
     } else {
       status = 200;
-      statusText = "OK";
       body = file;
     }
   } else {
     return Promise.reject(new HTTPError(`Requested file index out of bounds: ${id}`, {
       status: 404,
-      statusText: "Not Found",
       body: "404 Not Found",
     }));
   }
@@ -210,7 +214,7 @@ function serveFileDownload (req) {
   LOG(msg.join(", "));
   return Promise.resolve(new Response(body, {
     status: status,
-    statusText: statusText,
+    statusText: HTTP_STATUS_TEXT[status],
     headers: headers,
   }));
 }
@@ -234,7 +238,6 @@ function parseRangeHeader (range, filesize) {
   if (!range.startsWith("bytes=")) {
     return {
       "status": 200,
-      "statusText": "OK",
     };
   }
 
@@ -246,7 +249,6 @@ function parseRangeHeader (range, filesize) {
       // ignore whole range header
       return {
         "status": 200,
-        "statusText": "OK",
       };
     }
 
@@ -278,17 +280,14 @@ function parseRangeHeader (range, filesize) {
   if (ranges.length == 0) {
     return {
       "status": 200,
-      "statusText": "OK",
     };
   } else if (satisfiable.length == 0) {
     return {
       "status": 416,
-      "statusText": "Requested Range Not Satisfiable",
     };
   } else {
     return {
       "status": 206,
-      "statusText": "Partial Content",
       "satisfiable": satisfiable,
       "multipart": ranges.length > 1,
     };
