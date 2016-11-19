@@ -134,7 +134,7 @@ function listFiles () {
   var respObj = {files: []};
   for (var id = 0; id < files.length; id++) {
     var file = files[id];
-    respObj.files.push({name:file.name, size:file.size, id:id});
+    respObj.files.push({name:file.name, size:prettyPrintSize(file.size), id:id});
   }
   var headers = new Headers({'Content-Type': 'application/json'});
   return Promise.resolve(new Response(JSON.stringify(respObj), {
@@ -182,14 +182,17 @@ function serveFileDownload (req) {
   } else if (status == 206) {
     if (!range.multipart) {
       let satisfiable = range.satisfiable[0];
-      msg.push(`range: ${satisfiable.map(prettyPrintSize).join("-")}`);
+      msg.push(`range: ${satisfiable.
+        map(prettyPrintSize).
+        join("~").
+        replace(/,/g, "_")}`);
       headers["Content-Range"] = `bytes ${satisfiable.join("-")}/${filesize}`;
       body = file.slice(satisfiable[0], satisfiable[1] + 1);
     } else {
       let satisfiable = range.satisfiable;
       const boundary = Date.now();
       msg.push(`multipart/byteranges: ${satisfiable.
-        map(e => e.map(prettyPrintSize).join("-")).
+        map(e => e.map(prettyPrintSize).join("~").replace(/,/g, "_")).
         join(",")}`);
       headers["Content-Type"] = `multipart/byteranges; boundary=${boundary}`;
       let parts = [];
@@ -345,8 +348,8 @@ function findSatisfiableRanges (ranges) {
   //   support random access.
 }
 
-// use _ as thousands separators to pretty print filesizes
-// e.g. 1234567890 => 1_234_567_890
+// use , as thousands separators to pretty print filesizes
+// e.g. 1234567890 => 1,234,567,890
 function prettyPrintSize (size) {
-  return size.toLocaleString("en-US").replace(/,/g, "_");
+  return size.toLocaleString("en-US");
 }
