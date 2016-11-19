@@ -162,61 +162,65 @@ function serveFileDownload (req) {
   headers["Content-Disposition"] = `inline; filename*=UTF-8''${encodeRFC5987ValueChars(file.name)}`;
   headers["Accept-Ranges"] = "bytes";
 
-  msg.push(`Sending file ${file.name}`);
+  return sha256(`${file.name}\n${file.size}\n${file.lastModified}`).then(etag => {
+    headers["ETag"] = `"${etag}"`;
 
-  if (!req.headers.has("range")) {
-    return Promise.resolve(new Response(file, {headers: headers}));
-  }
+    msg.push(`Sending file ${file.name}`);
 
-  const filesize = file.size;
-  const range = parseRangeHeader(req.headers.get("range"), filesize);
-  let status = range.status;
-  let body;
-
-  if (status == 200) {
-    body = file;
-  } else if (status == 416) {
-    msg.push("416 Requested Range Not Satisfiable");
-    headers["Content-Range"] = `bytes */${filesize}`;
-    body = "416 Requested Range Not Satisfiable";
-  } else if (status == 206) {
-    if (!range.multipart) {
-      let satisfiable = range.satisfiable[0];
-      msg.push(`range: ${satisfiable.
-        map(prettyPrintSize).
-        join("~").
-        replace(/,/g, "_")}`);
-      headers["Content-Range"] = `bytes ${satisfiable.join("-")}/${filesize}`;
-      body = file.slice(satisfiable[0], satisfiable[1] + 1);
-    } else {
-      let satisfiable = range.satisfiable;
-      const boundary = Date.now();
-      msg.push(`multipart/byteranges: ${satisfiable.
-        map(e => e.map(prettyPrintSize).join("~").replace(/,/g, "_")).
-        join(",")}`);
-      headers["Content-Type"] = `multipart/byteranges; boundary=${boundary}`;
-      let parts = [];
-      satisfiable.forEach(e => {
-        parts.push(`\r\n--${boundary}\r\n` +
-                   `Content-type: ${type}\r\n` +
-                   `Content-range: bytes ${e.join("-")}/${filesize}\r\n\r\n`);
-        parts.push(file.slice(e[0], e[1] + 1));
-      });
-      parts.push(`\r\n--${boundary}--\r\n`);
-      body = new Blob(parts);
+    if (!req.headers.has("range")) {
+      return Promise.resolve(new Response(file, {headers: headers}));
     }
-  } else {
-    status = 500;
-    body = "500 Internal Server Error";
-    headers = {};
-  }
 
-  LOG(msg.join(", "));
-  return Promise.resolve(new Response(body, {
-    status: status,
-    statusText: HTTP_STATUS_TEXT[status],
-    headers: headers,
-  }));
+    const filesize = file.size;
+    const range = parseRangeHeader(req.headers.get("range"), filesize);
+    let status = range.status;
+    let body;
+
+    if (status == 200) {
+      body = file;
+    } else if (status == 416) {
+      msg.push("416 Requested Range Not Satisfiable");
+      headers["Content-Range"] = `bytes */${filesize}`;
+      body = "416 Requested Range Not Satisfiable";
+    } else if (status == 206) {
+      if (!range.multipart) {
+        let satisfiable = range.satisfiable[0];
+        msg.push(`range: ${satisfiable.
+          map(prettyPrintSize).
+          join("~").
+          replace(/,/g, "_")}`);
+        headers["Content-Range"] = `bytes ${satisfiable.join("-")}/${filesize}`;
+        body = file.slice(satisfiable[0], satisfiable[1] + 1);
+      } else {
+        let satisfiable = range.satisfiable;
+        const boundary = Date.now();
+        msg.push(`multipart/byteranges: ${satisfiable.
+          map(e => e.map(prettyPrintSize).join("~").replace(/,/g, "_")).
+          join(",")}`);
+        headers["Content-Type"] = `multipart/byteranges; boundary=${boundary}`;
+        let parts = [];
+        satisfiable.forEach(e => {
+          parts.push(`\r\n--${boundary}\r\n` +
+                     `Content-type: ${type}\r\n` +
+                     `Content-range: bytes ${e.join("-")}/${filesize}\r\n\r\n`);
+          parts.push(file.slice(e[0], e[1] + 1));
+        });
+        parts.push(`\r\n--${boundary}--\r\n`);
+        body = new Blob(parts);
+      }
+    } else {
+      status = 500;
+      body = "500 Internal Server Error";
+      headers = {};
+    }
+
+    LOG(msg.join(", "));
+    return Promise.resolve(new Response(body, {
+      status: status,
+      statusText: HTTP_STATUS_TEXT[status],
+      headers: headers,
+    }));
+  });
 }
 
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent
@@ -352,4 +356,31 @@ function findSatisfiableRanges (ranges) {
 // e.g. 1234567890 => 1,234,567,890
 function prettyPrintSize (size) {
   return size.toLocaleString("en-US");
+}
+
+// https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest
+function sha256(str) {
+  // We transform the string into an arraybuffer.
+  var buffer = new TextEncoder("utf-8").encode(str);
+  return crypto.subtle.digest("SHA-256", buffer).then(function (hash) {
+    return hex(hash);
+  });
+}
+
+function hex(buffer) {
+  var hexCodes = [];
+  var view = new DataView(buffer);
+  for (var i = 0; i < view.byteLength; i += 4) {
+    // Using getUint32 reduces the number of iterations needed (we process 4 bytes each time)
+    var value = view.getUint32(i)
+    // toString(16) will give the hex representation of the number without padding
+    var stringValue = value.toString(16)
+    // We use concatenation and slice for padding
+    var padding = '00000000'
+    var paddedValue = (padding + stringValue).slice(-padding.length)
+    hexCodes.push(paddedValue);
+  }
+
+  // Join all the hex strings into one
+  return hexCodes.join("");
 }
