@@ -1,0 +1,14 @@
+{
+  "globals": {
+    "window":     false,
+    "console":    false,
+    "document":   false,
+    "escape":     false,
+    "unescape":   false,
+    "navigator":  false,
+    "fetch":      false,
+    "Blob":       false,
+    "Response":   false,
+    "Headers":    false
+  }
+}

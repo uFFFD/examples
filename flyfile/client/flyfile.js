@@ -16,7 +16,7 @@ function LOG() {
     logentry_div.appendChild(logentry_text);
     logentry_div.appendChild(br);
   });
-  if (log_div.children.length == 0) {
+  if (log_div.children.length === 0) {
     log_div.appendChild(logentry_div);
   } else {
     log_div.insertBefore(logentry_div, log_div.children[0]);

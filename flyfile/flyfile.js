@@ -1,3 +1,5 @@
+/* jshint esnext: true, moz: true, globalstrict: true */
+
 "use strict";
 
 const HTTP_STATUS_TEXT = {
@@ -41,7 +43,7 @@ function LOG() {
     logentry_div.appendChild(logentry_text);
     logentry_div.appendChild(br);
   });
-  if (log_div.children.length == 0) {
+  if (log_div.children.length === 0) {
     log_div.appendChild(logentry_div);
   } else {
     log_div.insertBefore(logentry_div, log_div.children[0]);
@@ -64,13 +66,13 @@ function fileChanged() {
 }
 
 function share() {
-  if (get_shared_files().length == 0) {
+  if (get_shared_files().length === 0) {
     LOG("Select one or more files to share!");
     return;
   }
 
   var share_name = get_share_name();
-  if (share_name.length == 0) {
+  if (share_name.length === 0) {
     LOG("Share name not given!");
     return;
   }
@@ -132,7 +134,7 @@ function listFiles () {
   var respObj = {files: []};
   for (var id = 0; id < files.length; id++) {
     var file = files[id];
-    respObj.files.push({name:file.name, size:file.size, id:id})
+    respObj.files.push({name:file.name, size:file.size, id:id});
   }
   var headers = new Headers({'Content-Type': 'application/json'});
   return Promise.resolve(new Response(JSON.stringify(respObj), {
@@ -170,8 +172,9 @@ function serveFileDownload (req) {
         headers.set("Content-Range", "bytes */" + filesize);
         body = "416 Requested Range Not Satisfiable";
       } else if (status == 206) {
+        var satisfiable;
         if (range.multipart) {
-          var satisfiable = range.satisfiable;
+          satisfiable = range.satisfiable;
           var boundary = Date.now();
           msg.push("multipart/byteranges: " + satisfiable.map(function (el) {
             return el.map(prettyPrintSize).join("-");
@@ -191,7 +194,7 @@ function serveFileDownload (req) {
           parts.push(CRLF + "--" + boundary + "--" + CRLF);
           body = new Blob(parts);
         } else {
-          var satisfiable = range.satisfiable[0];
+          satisfiable = range.satisfiable[0];
           msg.push("range: " + satisfiable.map(prettyPrintSize).join("-"));
           headers.set("Content-Range",
                       "bytes " + satisfiable.join("-") + "/" + filesize);
@@ -254,7 +257,7 @@ function parseRangeHeader (range, filesize) {
 
     r = r.trim().split("-");
 
-    if (r[0] == "") {
+    if (r[0] === "") {
       // suffix-byte-range-spec
       // -xxx
       // last xxx bytes
@@ -264,7 +267,7 @@ function parseRangeHeader (range, filesize) {
       // byte-range-spec
       // xxx-xxx or xxx-
       r[0] = Number.parseInt(r[0]);
-      r[1] = r[1] == "" ? filesize - 1 : Number.parseInt(r[1]);
+      r[1] = r[1] === "" ? filesize - 1 : Number.parseInt(r[1]);
     }
     if (r[0] < 0) {
       r[0] = 0;
@@ -277,11 +280,11 @@ function parseRangeHeader (range, filesize) {
 
   var satisfiable = findSatisfiableRanges(ranges);
 
-  if (ranges.length == 0) {
+  if (ranges.length === 0) {
     return {
       "status": 200,
     };
-  } else if (satisfiable.length == 0) {
+  } else if (satisfiable.length === 0) {
     return {
       "status": 416,
     };
@@ -316,7 +319,7 @@ function findSatisfiableRanges (ranges) {
       return result;
     }
 
-    if (result.length == 0) {
+    if (result.length === 0) {
       return [cur];
     }
 
@@ -326,7 +329,7 @@ function findSatisfiableRanges (ranges) {
     // if and only if !(a.end < b.start - 80 || b.end < a.start - 80)
     //   ->  a.end > b.start - 80 && a.start - 80 < b.end
     if (last[1] > cur[0] - 80 && last[0] - 80 < cur[1]) {
-      return [...result, [Math.min(last[0], cur[0]), Math.max(last[1], cur[1])]]
+      return [...result, [Math.min(last[0], cur[0]), Math.max(last[1], cur[1])]];
     } else {
       return [...result, last, cur];
     }
