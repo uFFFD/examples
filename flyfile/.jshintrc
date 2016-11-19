@@ -9,6 +9,8 @@
     "fetch":      false,
     "Blob":       false,
     "Response":   false,
-    "Headers":    false
+    "Headers":    false,
+    "TextEncoder":false,
+    "crypto":     false
   }
 }
